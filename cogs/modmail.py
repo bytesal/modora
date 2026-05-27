@@ -20,17 +20,10 @@ class ModMailCog(commands.Cog):
         self.cooldown_manager = CooldownManager(bot.db)
         self.log_service = LogService(bot)
 
-    @app_commands.group(name="modmail", description="ModMail commands")
-    async def modmail_group(self, interaction: Interaction):
-        if interaction.invoked_subcommand is None:
-            embed = discord.Embed(
-                title="ModMail Commands",
-                description="Use `/modmail new` to open a ticket.\nUse `/modmail adduser` or `/modmail removeuser` to manage users in a ticket channel.",
-                color=discord.Color.blue()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+    # ========== CREATE THE COMMAND GROUP ==========
+    modmail = app_commands.Group(name="modmail", description="ModMail commands")
 
-    @modmail_group.command(name="new", description="Open a new ModMail ticket")
+    @modmail.command(name="new", description="Open a new ModMail ticket")
     async def modmail_new(self, interaction: Interaction, message: str = None):
         if not await check_blacklist(interaction):
             return
@@ -91,7 +84,7 @@ class ModMailCog(commands.Cog):
         
         logger.info(f"New ticket created by {interaction.user} in guild {interaction.guild.id}")
 
-    @modmail_group.command(name="adduser", description="Add a user to the current ticket")
+    @modmail.command(name="adduser", description="Add a user to the current ticket")
     async def add_user(self, interaction: Interaction, user: discord.User):
         if not await self._check_staff_and_ticket(interaction):
             return
@@ -101,7 +94,7 @@ class ModMailCog(commands.Cog):
         except Exception as e:
             await interaction.response.send_message(f"❌ Failed to add user: {e}", ephemeral=True)
 
-    @modmail_group.command(name="removeuser", description="Remove a user from the current ticket")
+    @modmail.command(name="removeuser", description="Remove a user from the current ticket")
     async def remove_user(self, interaction: Interaction, user: discord.User):
         if not await self._check_staff_and_ticket(interaction):
             return
@@ -115,7 +108,7 @@ class ModMailCog(commands.Cog):
         except Exception as e:
             await interaction.response.send_message(f"❌ Failed to remove user: {e}", ephemeral=True)
 
-    @modmail_group.command(name="close", description="Close the current ticket")
+    @modmail.command(name="close", description="Close the current ticket")
     async def close_ticket(self, interaction: Interaction):
         if not await self._check_staff_and_ticket(interaction):
             return
@@ -140,7 +133,7 @@ class ModMailCog(commands.Cog):
         await interaction.channel.delete()
         logger.info(f"Ticket {ticket.ticket_id} closed by {interaction.user}")
 
-    @modmail_group.command(name="claim", description="Claim the current ticket")
+    @modmail.command(name="claim", description="Claim the current ticket")
     async def claim_ticket(self, interaction: Interaction):
         if not await self._check_staff_and_ticket(interaction):
             return
@@ -158,7 +151,7 @@ class ModMailCog(commands.Cog):
         await self.log_service.log_ticket_claim(interaction.guild_id, ticket, interaction.user)
         logger.info(f"Ticket {ticket.ticket_id} claimed by {interaction.user}")
 
-    @modmail_group.command(name="rename", description="Rename the current ticket channel")
+    @modmail.command(name="rename", description="Rename the current ticket channel")
     async def rename_ticket(self, interaction: Interaction, new_name: str):
         if not await self._check_staff_and_ticket(interaction):
             return
@@ -177,6 +170,7 @@ class ModMailCog(commands.Cog):
             logger.error(f"Failed to rename channel: {e}")
             await interaction.response.send_message("❌ Failed to rename channel.", ephemeral=True)
 
+    # ========== EVENT HANDLERS ==========
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot:
@@ -268,4 +262,7 @@ class ModMailCog(commands.Cog):
         return True
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(ModMailCog(bot))
+    cog = ModMailCog(bot)
+    await bot.add_cog(cog)
+    # Add the command group to the tree
+    bot.tree.add_command(cog.modmail)
