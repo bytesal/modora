@@ -19,15 +19,24 @@ class ModMailCog(commands.Cog):
         self.cooldown_manager = CooldownManager(bot.db)
         self.log_service = LogService(bot)
 
-    # ========== SLASH COMMANDS ==========
-    @app_commands.command(name="modmail", description="Open a new ModMail ticket")
+    # ========== SLASH COMMANDS GROUP ==========
+    @app_commands.group(name="modmail", description="ModMail commands")
+    async def modmail_group(self, interaction: Interaction):
+        if interaction.invoked_subcommand is None:
+            embed = discord.Embed(
+                title="ModMail Commands",
+                description="Use `/modmail new` to open a ticket.\nUse `/modmail adduser` or `/modmail removeuser` to manage users in a ticket channel.",
+                color=discord.Color.blue()
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @modmail_group.command(name="new", description="Open a new ModMail ticket")
     async def modmail_new(self, interaction: Interaction, message: str = None):
         """Open a new ticket. If message is provided, use as initial message."""
         if not interaction.guild:
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
             return
         
-        # Check if user already has open ticket
         config_service = GuildConfigService(self.bot.db)
         config = await config_service.get_config(interaction.guild_id)
         
@@ -41,7 +50,6 @@ class ModMailCog(commands.Cog):
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         
-        # Cooldown check
         remaining = await self.cooldown_manager.get_remaining_cooldown(
             interaction.user.id, interaction.guild_id, config.cooldown_seconds
         )
@@ -56,7 +64,6 @@ class ModMailCog(commands.Cog):
         
         await interaction.response.defer(ephemeral=True)
         
-        # Create ticket channel
         channel = await self.ticket_service.create_ticket_channel(
             guild=interaction.guild,
             user=interaction.user,
@@ -67,27 +74,47 @@ class ModMailCog(commands.Cog):
             await interaction.followup.send("❌ Failed to create ticket. Please check category configuration.", ephemeral=True)
             return
         
-        # Get the ticket document
         ticket = await self.ticket_service.get_ticket_by_channel(channel.id)
         
-        # Send initial message in channel
         embed = create_ticket_embed(interaction.user, interaction.user.name)
         view = TicketControlView(self.ticket_service, interaction.user.id, interaction.guild.id)
         await channel.send(embed=embed, view=view)
         
-        # Send initial user message if provided
         if message:
             await channel.send(f"**{interaction.user}:** {message}")
         
         await interaction.followup.send(f"✅ Ticket created: {channel.mention}", ephemeral=True)
         
-        # Log ticket creation
         if ticket:
             await self.log_service.log_ticket_create(interaction.guild_id, interaction.user, ticket, channel)
         
         logger.info(f"New ticket created by {interaction.user} in guild {interaction.guild.id}")
 
-    @app_commands.command(name="close", description="Close the current ticket")
+    @modmail_group.command(name="adduser", description="Add a user to the current ticket")
+    async def add_user(self, interaction: Interaction, user: discord.User):
+        if not await self._check_staff_and_ticket(interaction):
+            return
+        try:
+            await interaction.channel.set_permissions(user, read_messages=True, send_messages=True, attach_files=True, embed_links=True)
+            await interaction.response.send_message(f"✅ Added {user.mention} to this ticket.", ephemeral=False)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Failed to add user: {e}", ephemeral=True)
+
+    @modmail_group.command(name="removeuser", description="Remove a user from the current ticket")
+    async def remove_user(self, interaction: Interaction, user: discord.User):
+        if not await self._check_staff_and_ticket(interaction):
+            return
+        ticket = await self.ticket_service.get_ticket_by_channel(interaction.channel_id)
+        if ticket and user.id == ticket.user_id:
+            await interaction.response.send_message("❌ Cannot remove the original ticket owner.", ephemeral=True)
+            return
+        try:
+            await interaction.channel.set_permissions(user, read_messages=False, send_messages=False)
+            await interaction.response.send_message(f"✅ Removed {user.mention} from this ticket.", ephemeral=False)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Failed to remove user: {e}", ephemeral=True)
+
+    @modmail_group.command(name="close", description="Close the current ticket")
     async def close_ticket(self, interaction: Interaction):
         """Close the ticket channel where command is used."""
         if not await self._check_staff_and_ticket(interaction):
@@ -99,7 +126,6 @@ class ModMailCog(commands.Cog):
             await interaction.followup.send("❌ This is not a valid ticket channel.", ephemeral=True)
             return
         
-        # Get user for logging
         user = self.bot.get_user(ticket.user_id)
         if not user:
             try:
@@ -107,19 +133,15 @@ class ModMailCog(commands.Cog):
             except:
                 user = None
         
-        # Send closing message
         await interaction.followup.send("🔒 Closing ticket in 5 seconds...")
         await self.ticket_service.close_ticket(ticket, interaction.user.id)
-        
-        # Log ticket close
         await self.log_service.log_ticket_close(interaction.guild_id, user, ticket, interaction.user, transcript_url=None)
         
-        # Delete channel after a short delay
         await discord.utils.sleep_until(discord.utils.utcnow() + discord.utils.timedelta(seconds=5))
         await interaction.channel.delete()
         logger.info(f"Ticket {ticket.ticket_id} closed by {interaction.user}")
 
-    @app_commands.command(name="claim", description="Claim the current ticket")
+    @modmail_group.command(name="claim", description="Claim the current ticket")
     async def claim_ticket(self, interaction: Interaction):
         if not await self._check_staff_and_ticket(interaction):
             return
@@ -136,15 +158,12 @@ class ModMailCog(commands.Cog):
         await self.ticket_service.claim_ticket(ticket.ticket_id, interaction.user.id)
         await interaction.response.send_message(f"✅ You have claimed this ticket.", ephemeral=False)
         
-        # Update the embed in the channel
         embed = discord.Embed(title="Ticket Claimed", description=f"Claimed by {interaction.user.mention}", color=discord.Color.green())
         await interaction.channel.send(embed=embed)
-        
-        # Log claim
         await self.log_service.log_ticket_claim(interaction.guild_id, ticket, interaction.user)
         logger.info(f"Ticket {ticket.ticket_id} claimed by {interaction.user}")
 
-    @app_commands.command(name="rename", description="Rename the current ticket channel")
+    @modmail_group.command(name="rename", description="Rename the current ticket channel")
     async def rename_ticket(self, interaction: Interaction, new_name: str):
         if not await self._check_staff_and_ticket(interaction):
             return
@@ -154,16 +173,11 @@ class ModMailCog(commands.Cog):
             await interaction.response.send_message("❌ This is not a valid ticket channel.", ephemeral=True)
             return
         
-        # Capture old name for logging
         old_name = interaction.channel.name
-        
-        # Sanitize name: lowercase, no spaces
         clean_name = new_name.lower().replace(" ", "-")[:100]
         try:
             await interaction.channel.edit(name=f"ticket-{clean_name}")
             await interaction.response.send_message(f"✅ Channel renamed to `{clean_name}`", ephemeral=False)
-            
-            # Log rename
             await self.log_service.log_ticket_rename(interaction.guild_id, ticket, old_name, clean_name, interaction.user)
             logger.info(f"Ticket channel renamed from {old_name} to {clean_name} by {interaction.user}")
         except Exception as e:
@@ -176,21 +190,17 @@ class ModMailCog(commands.Cog):
         if message.author.bot:
             return
         
-        # Handle DMs from users (user replying to ModMail)
         if isinstance(message.channel, discord.DMChannel):
             await self.handle_user_dm(message)
             return
         
-        # Handle messages in ticket channels (staff replying)
         if message.guild and isinstance(message.channel, discord.TextChannel):
             await self.handle_staff_reply(message)
 
     async def handle_user_dm(self, message: discord.Message):
-        """User sent a DM to the bot – relay to their open ticket channel."""
         user = message.author
         ticket = await self.ticket_service.get_open_ticket(user.id)
         if not ticket:
-            # No open ticket, send info message
             embed = discord.Embed(
                 title="ModMail",
                 description="You don't have an open ticket. Use `/modmail new` or the ticket panel button to create one.",
@@ -199,7 +209,6 @@ class ModMailCog(commands.Cog):
             await user.send(embed=embed)
             return
         
-        # Fetch guild and channel
         guild = self.bot.get_guild(ticket.guild_id)
         if not guild:
             logger.error(f"Guild {ticket.guild_id} not found")
@@ -211,25 +220,17 @@ class ModMailCog(commands.Cog):
             await self.ticket_service.close_ticket(ticket, None)
             return
         
-        # Relay message to staff channel
         embed = create_reply_embed(user, message.content, is_staff=False)
         await channel.send(embed=embed)
-        
-        # Update last activity
         await self.ticket_service.update_activity(ticket.ticket_id)
-        
-        # Log user reply
         await self.log_service.log_user_reply(ticket.guild_id, ticket, user, message.content)
         logger.info(f"User reply from {user} in ticket {ticket.ticket_id}")
 
     async def handle_staff_reply(self, message: discord.Message):
-        """Staff message in a ticket channel – relay to user's DM."""
-        # Check if channel is a ticket channel
         ticket = await self.ticket_service.get_ticket_by_channel(message.channel.id)
         if not ticket:
             return
         
-        # Check if sender is staff
         config_service = GuildConfigService(self.bot.db)
         config = await config_service.get_config(message.guild.id)
         member = message.guild.get_member(message.author.id)
@@ -237,12 +238,10 @@ class ModMailCog(commands.Cog):
             return
         
         if not await is_staff(member, config):
-            # Non-staff should not be able to send messages in ticket channels normally, but just in case
             await message.delete()
             await message.author.send("You cannot reply in this ticket channel. Staff only.")
             return
         
-        # Get the user who opened the ticket
         user = self.bot.get_user(ticket.user_id)
         if not user:
             try:
@@ -251,22 +250,17 @@ class ModMailCog(commands.Cog):
                 await message.channel.send("❌ Could not find the user to relay the message.")
                 return
         
-        # Relay to user's DM
         embed = create_reply_embed(message.author, message.content, is_staff=True)
         try:
             await user.send(embed=embed)
         except discord.Forbidden:
             await message.channel.send("⚠️ Could not DM the user. They may have DMs disabled or blocked the bot.")
         
-        # Update activity
         await self.ticket_service.update_activity(ticket.ticket_id)
-        
-        # Log staff reply
         await self.log_service.log_staff_reply(ticket.guild_id, ticket, message.author, message.content)
         logger.info(f"Staff reply from {message.author} in ticket {ticket.ticket_id}")
 
     async def _check_staff_and_ticket(self, interaction: Interaction) -> bool:
-        """Helper to verify staff permission and that command is used in a guild ticket channel."""
         if not interaction.guild:
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
             return False
