@@ -4,9 +4,11 @@ from discord.ext import commands
 from config.config import config
 from database.mongo import mongo
 from utils.logger import setup_logger, get_logger
+from utils.error_handler import ErrorHandler
+from utils.blacklist import BlacklistManager
+from utils.rate_limiter import RateLimiter
 import os
 
-# Initialise logger
 setup_logger()
 logger = get_logger()
 
@@ -16,27 +18,30 @@ class ModMailBot(commands.Bot):
         intents.message_content = True
         intents.members = True
         intents.guilds = True
-        intents.dm_messages = True  # To receive user DMs for replies
+        intents.dm_messages = True
         
         super().__init__(
             command_prefix=config.BOT_PREFIX,
             intents=intents,
-            help_command=None  # We'll implement custom help later
+            help_command=None
         )
-        self.db = None  # MongoDB instance will be attached here
+        self.db = None
+        self.error_handler = None
+        self.blacklist = None
+        self.dm_rate_limiter = RateLimiter(max_messages=5, per_seconds=60)
 
     async def setup_hook(self):
-        """Async setup before bot starts."""
         logger.info("Setting up bot...")
         
-        # Connect to MongoDB
         await mongo.connect()
         self.db = mongo
+        self.blacklist = BlacklistManager(self.db)
         
-        # Load all cogs from cogs/ directory
+        self.error_handler = ErrorHandler(self)
+        
         await self.load_cogs()
         
-        # Sync slash commands (globally or per guild? globally for now)
+        # Sync slash commands
         await self.tree.sync()
         logger.info("Slash commands synced globally")
         
@@ -45,7 +50,6 @@ class ModMailBot(commands.Bot):
         await self.change_presence(activity=activity)
 
     async def load_cogs(self):
-        """Load all cog files from the cogs folder."""
         cogs_folder = "cogs"
         for filename in os.listdir(cogs_folder):
             if filename.endswith(".py") and not filename.startswith("__"):
@@ -56,30 +60,50 @@ class ModMailBot(commands.Bot):
                     logger.error(f"Failed to load cog {filename}: {e}")
 
     async def on_ready(self):
-        """Event triggered when bot is ready."""
         logger.info(f"Logged in as {self.user} (ID: {self.user.id})")
         logger.info(f"Connected to {len(self.guilds)} guild(s)")
 
     async def on_message(self, message: discord.Message):
-        """Handle DMs for ModMail (to be expanded later)."""
         if message.author.bot:
             return
         
-        # For now, just log DMs
+        # Global blacklist check for DM commands
         if isinstance(message.channel, discord.DMChannel):
-            logger.info(f"DM from {message.author}: {message.content}")
+            if await self.blacklist.is_blacklisted(message.author.id, "user"):
+                await message.channel.send("❌ You are blacklisted from using this bot.")
+                return
+            
+            # Rate limiting for DM replies
+            limited, wait = self.dm_rate_limiter.check_and_update(message.author.id)
+            if limited:
+                await message.channel.send(f"⏳ You are sending messages too quickly. Please wait {wait} seconds.")
+                return
         
-        # Ensure commands still process
+        # Process commands (if any prefix commands are added later)
         await self.process_commands(message)
 
+    async def on_command_error(self, ctx, error):
+        if self.error_handler:
+            await self.error_handler.on_command_error(ctx, error)
+
+    async def on_error(self, event_method, *args, **kwargs):
+        logger.error(f"Unhandled error in {event_method}")
+        import traceback
+        traceback.print_exc()
+
     async def close(self):
-        """Clean up on shutdown."""
         logger.info("Shutting down...")
         await mongo.disconnect()
         await super().close()
 
 def main():
     bot = ModMailBot()
+    
+    # Set up slash command error handling
+    @bot.tree.error
+    async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
+        await bot.error_handler.on_app_command_error(interaction, error)
+    
     try:
         bot.run(config.BOT_TOKEN)
     except KeyboardInterrupt:
