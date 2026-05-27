@@ -176,6 +176,8 @@ class SetupCog(commands.Cog):
                     "/setup logs – set logs channel\n"
                     "/setup transcripts – set transcripts channel\n"
                     "/setup panel – set panel channel and deploy message\n"
+                    "/setup cooldown – set cooldown seconds between tickets\n"
+                    "/setup autoclose – set auto-close timeout in minutes\n"
                     "/setup show – show current configuration\n"
                     "/setup reset – reset all settings"
                 ),
@@ -218,6 +220,40 @@ class SetupCog(commands.Cog):
             return
         modal = PanelChannelModal(self.bot)
         await interaction.response.send_modal(modal)
+
+    @setup_group.command(name="cooldown", description="Set cooldown seconds between ticket creation (0 to disable)")
+    async def setup_cooldown(self, interaction: Interaction, seconds: int):
+        if not await is_admin(interaction):
+            await interaction.response.send_message("❌ You need administrator permissions.", ephemeral=True)
+            return
+        if seconds < 0:
+            await interaction.response.send_message("❌ Cooldown cannot be negative.", ephemeral=True)
+            return
+        service = GuildConfigService(self.bot.db)
+        await service.update_config(interaction.guild_id, {"cooldown_seconds": seconds})
+        embed = discord.Embed(
+            title="✅ Cooldown Set",
+            description=f"Ticket creation cooldown is now {seconds} seconds.",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @setup_group.command(name="autoclose", description="Set auto-close timeout in minutes (0 to disable)")
+    async def setup_autoclose(self, interaction: Interaction, minutes: int):
+        if not await is_admin(interaction):
+            await interaction.response.send_message("❌ You need administrator permissions.", ephemeral=True)
+            return
+        if minutes < 0:
+            await interaction.response.send_message("❌ Minutes cannot be negative.", ephemeral=True)
+            return
+        service = GuildConfigService(self.bot.db)
+        await service.update_config(interaction.guild_id, {"auto_close_minutes": minutes})
+        embed = discord.Embed(
+            title="✅ Auto-Close Set",
+            description=f"Tickets will be closed after {minutes} minutes of inactivity." if minutes > 0 else "Auto-close disabled.",
+            color=discord.Color.green()
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @setup_group.command(name="show", description="Show current configuration for this server")
     async def setup_show(self, interaction: Interaction):
