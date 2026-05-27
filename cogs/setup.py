@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
-from discord import app_commands, Interaction, Modal, TextInput, TextStyle
+from discord import app_commands, Interaction
+from discord.ui import Modal, TextInput, TextStyle
 from typing import Optional
 from services.guild_config_service import GuildConfigService
 from utils.permissions import is_admin
@@ -138,7 +139,6 @@ class PanelChannelModal(Modal, title="Set Panel Channel"):
             service = GuildConfigService(interaction.client.db)
             await service.set_panel_channel(interaction.guild_id, channel_id)
             
-            # Deploy panel
             cog = interaction.client.get_cog("SetupCog")
             success = await cog.deploy_panel(interaction, channel_id)
             if success:
@@ -291,7 +291,6 @@ class SetupCog(commands.Cog):
         logger.info(f"Guild {interaction.guild_id} reset configuration")
 
     async def deploy_panel(self, interaction: Interaction, channel_id: int) -> bool:
-        """Deploy the ticket panel message in the specified channel."""
         channel = interaction.guild.get_channel(channel_id)
         if not channel:
             return False
@@ -305,7 +304,6 @@ class SetupCog(commands.Cog):
         
         try:
             message = await channel.send(embed=embed, view=view)
-            # Save message ID to config
             service = GuildConfigService(self.bot.db)
             await service.set_panel_message(interaction.guild_id, message.id)
             return True
