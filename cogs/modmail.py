@@ -1,7 +1,6 @@
 import discord
 from discord.ext import commands
 from discord import app_commands, Interaction
-from typing import Union
 from services.ticket_service import TicketService
 from services.guild_config_service import GuildConfigService
 from utils.permissions import is_staff, is_ticket_channel, check_blacklist
@@ -20,7 +19,7 @@ class ModMailCog(commands.Cog):
         self.cooldown_manager = CooldownManager(bot.db)
         self.log_service = LogService(bot)
 
-    # ========== CREATE THE COMMAND GROUP ==========
+    # ========== COMMAND GROUP ==========
     modmail = app_commands.Group(name="modmail", description="ModMail commands")
 
     @modmail.command(name="new", description="Open a new ModMail ticket")
@@ -30,10 +29,10 @@ class ModMailCog(commands.Cog):
         if not interaction.guild:
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
             return
-        
+
         config_service = GuildConfigService(self.bot.db)
         config = await config_service.get_config(interaction.guild_id)
-        
+
         existing = await self.ticket_service.get_open_ticket(interaction.user.id, interaction.guild_id)
         if existing:
             embed = discord.Embed(
@@ -43,7 +42,7 @@ class ModMailCog(commands.Cog):
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
-        
+
         remaining = await self.cooldown_manager.get_remaining_cooldown(
             interaction.user.id, interaction.guild_id, config.cooldown_seconds
         )
@@ -55,33 +54,33 @@ class ModMailCog(commands.Cog):
             )
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
-        
+
         await interaction.response.defer(ephemeral=True)
-        
+
         channel = await self.ticket_service.create_ticket_channel(
             guild=interaction.guild,
             user=interaction.user,
             config=config
         )
-        
+
         if not channel:
             await interaction.followup.send("❌ Failed to create ticket. Please check category configuration.", ephemeral=True)
             return
-        
+
         ticket = await self.ticket_service.get_ticket_by_channel(channel.id)
-        
+
         embed = create_ticket_embed(interaction.user, interaction.user.name)
         view = TicketControlView(self.ticket_service, interaction.user.id, interaction.guild.id)
         await channel.send(embed=embed, view=view)
-        
+
         if message:
             await channel.send(f"**{interaction.user}:** {message}")
-        
+
         await interaction.followup.send(f"✅ Ticket created: {channel.mention}", ephemeral=True)
-        
+
         if ticket:
             await self.log_service.log_ticket_create(interaction.guild_id, interaction.user, ticket, channel)
-        
+
         logger.info(f"New ticket created by {interaction.user} in guild {interaction.guild.id}")
 
     @modmail.command(name="adduser", description="Add a user to the current ticket")
@@ -117,18 +116,18 @@ class ModMailCog(commands.Cog):
         if not ticket:
             await interaction.followup.send("❌ This is not a valid ticket channel.", ephemeral=True)
             return
-        
+
         user = self.bot.get_user(ticket.user_id)
         if not user:
             try:
                 user = await self.bot.fetch_user(ticket.user_id)
             except:
                 user = None
-        
+
         await interaction.followup.send("🔒 Closing ticket in 5 seconds...")
         await self.ticket_service.close_ticket(ticket, interaction.user.id)
         await self.log_service.log_ticket_close(interaction.guild_id, user, ticket, interaction.user, transcript_url=None)
-        
+
         await discord.utils.sleep_until(discord.utils.utcnow() + discord.utils.timedelta(seconds=5))
         await interaction.channel.delete()
         logger.info(f"Ticket {ticket.ticket_id} closed by {interaction.user}")
@@ -186,7 +185,7 @@ class ModMailCog(commands.Cog):
         if await self.bot.blacklist.is_blacklisted(user.id, "user"):
             await user.send("❌ You are blacklisted from using this bot.")
             return
-        
+
         ticket = await self.ticket_service.get_open_ticket(user.id)
         if not ticket:
             embed = discord.Embed(
@@ -196,18 +195,18 @@ class ModMailCog(commands.Cog):
             )
             await user.send(embed=embed)
             return
-        
+
         guild = self.bot.get_guild(ticket.guild_id)
         if not guild:
             logger.error(f"Guild {ticket.guild_id} not found")
             return
-        
+
         channel = guild.get_channel(ticket.channel_id)
         if not channel:
             await user.send("❌ Your ticket channel no longer exists. Please create a new ticket.")
             await self.ticket_service.close_ticket(ticket, None)
             return
-        
+
         embed = create_reply_embed(user, message.content, is_staff=False)
         await channel.send(embed=embed)
         await self.ticket_service.update_activity(ticket.ticket_id)
@@ -218,7 +217,7 @@ class ModMailCog(commands.Cog):
         ticket = await self.ticket_service.get_ticket_by_channel(message.channel.id)
         if not ticket:
             return
-        
+
         config_service = GuildConfigService(self.bot.db)
         config = await config_service.get_config(message.guild.id)
         member = message.guild.get_member(message.author.id)
@@ -228,7 +227,7 @@ class ModMailCog(commands.Cog):
             await message.delete()
             await message.author.send("You cannot reply in this ticket channel. Staff only.")
             return
-        
+
         user = self.bot.get_user(ticket.user_id)
         if not user:
             try:
@@ -236,13 +235,13 @@ class ModMailCog(commands.Cog):
             except:
                 await message.channel.send("❌ Could not find the user to relay the message.")
                 return
-        
+
         embed = create_reply_embed(message.author, message.content, is_staff=True)
         try:
             await user.send(embed=embed)
         except discord.Forbidden:
             await message.channel.send("⚠️ Could not DM the user. They may have DMs disabled or blocked the bot.")
-        
+
         await self.ticket_service.update_activity(ticket.ticket_id)
         await self.log_service.log_staff_reply(ticket.guild_id, ticket, message.author, message.content)
         logger.info(f"Staff reply from {message.author} in ticket {ticket.ticket_id}")
@@ -264,5 +263,4 @@ class ModMailCog(commands.Cog):
 async def setup(bot: commands.Bot):
     cog = ModMailCog(bot)
     await bot.add_cog(cog)
-    # Add the command group to the tree
-    bot.tree.add_command(cog.modmail)
+    # No manual add_command – auto-registered because group is a class attribute
