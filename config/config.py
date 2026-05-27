@@ -26,7 +26,8 @@ class Config:
     MONGO_MIN_POOL_SIZE = int(os.getenv("MONGO_MIN_POOL_SIZE", "1"))
     MONGO_MAX_IDLE_TIME_MS = int(os.getenv("MONGO_MAX_IDLE_TIME_MS", "10000"))
     
-    HEALTH_CHECK_PORT = int(os.getenv("HEALTH_CHECK_PORT", "8080"))
+    # Railway provides PORT, default to 8080
+    HEALTH_CHECK_PORT = int(os.getenv("PORT", "8080"))
     
     MAX_MESSAGES_CACHE = int(os.getenv("MAX_MESSAGES_CACHE", "1000"))
     DISABLE_VOICE = os.getenv("DISABLE_VOICE", "True").lower() == "true"
