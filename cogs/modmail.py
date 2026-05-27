@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord import app_commands, Interaction
+from typing import Union
 from services.ticket_service import TicketService
 from services.guild_config_service import GuildConfigService
 from utils.permissions import is_staff, is_ticket_channel, check_blacklist
@@ -19,7 +20,6 @@ class ModMailCog(commands.Cog):
         self.cooldown_manager = CooldownManager(bot.db)
         self.log_service = LogService(bot)
 
-    # ========== SLASH COMMANDS GROUP ==========
     @app_commands.group(name="modmail", description="ModMail commands")
     async def modmail_group(self, interaction: Interaction):
         if interaction.invoked_subcommand is None:
@@ -32,11 +32,8 @@ class ModMailCog(commands.Cog):
 
     @modmail_group.command(name="new", description="Open a new ModMail ticket")
     async def modmail_new(self, interaction: Interaction, message: str = None):
-        """Open a new ticket. If message is provided, use as initial message."""
-        # Blacklist check
         if not await check_blacklist(interaction):
             return
-        
         if not interaction.guild:
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
             return
@@ -120,10 +117,8 @@ class ModMailCog(commands.Cog):
 
     @modmail_group.command(name="close", description="Close the current ticket")
     async def close_ticket(self, interaction: Interaction):
-        """Close the ticket channel where command is used."""
         if not await self._check_staff_and_ticket(interaction):
             return
-        
         await interaction.response.defer()
         ticket = await self.ticket_service.get_ticket_by_channel(interaction.channel_id)
         if not ticket:
@@ -149,19 +144,15 @@ class ModMailCog(commands.Cog):
     async def claim_ticket(self, interaction: Interaction):
         if not await self._check_staff_and_ticket(interaction):
             return
-        
         ticket = await self.ticket_service.get_ticket_by_channel(interaction.channel_id)
         if not ticket:
             await interaction.response.send_message("❌ This is not a valid ticket channel.", ephemeral=True)
             return
-        
         if ticket.staff_id:
             await interaction.response.send_message(f"❌ Ticket already claimed by <@{ticket.staff_id}>", ephemeral=True)
             return
-        
         await self.ticket_service.claim_ticket(ticket.ticket_id, interaction.user.id)
         await interaction.response.send_message(f"✅ You have claimed this ticket.", ephemeral=False)
-        
         embed = discord.Embed(title="Ticket Claimed", description=f"Claimed by {interaction.user.mention}", color=discord.Color.green())
         await interaction.channel.send(embed=embed)
         await self.log_service.log_ticket_claim(interaction.guild_id, ticket, interaction.user)
@@ -171,12 +162,10 @@ class ModMailCog(commands.Cog):
     async def rename_ticket(self, interaction: Interaction, new_name: str):
         if not await self._check_staff_and_ticket(interaction):
             return
-        
         ticket = await self.ticket_service.get_ticket_by_channel(interaction.channel_id)
         if not ticket:
             await interaction.response.send_message("❌ This is not a valid ticket channel.", ephemeral=True)
             return
-        
         old_name = interaction.channel.name
         clean_name = new_name.lower().replace(" ", "-")[:100]
         try:
@@ -188,24 +177,18 @@ class ModMailCog(commands.Cog):
             logger.error(f"Failed to rename channel: {e}")
             await interaction.response.send_message("❌ Failed to rename channel.", ephemeral=True)
 
-    # ========== EVENT HANDLERS ==========
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot:
             return
-        
         if isinstance(message.channel, discord.DMChannel):
             await self.handle_user_dm(message)
             return
-        
         if message.guild and isinstance(message.channel, discord.TextChannel):
             await self.handle_staff_reply(message)
 
     async def handle_user_dm(self, message: discord.Message):
-        """User sent a DM to the bot – relay to their open ticket channel."""
         user = message.author
-        
-        # Blacklist check
         if await self.bot.blacklist.is_blacklisted(user.id, "user"):
             await user.send("❌ You are blacklisted from using this bot.")
             return
@@ -238,7 +221,6 @@ class ModMailCog(commands.Cog):
         logger.info(f"User reply from {user} in ticket {ticket.ticket_id}")
 
     async def handle_staff_reply(self, message: discord.Message):
-        """Staff message in a ticket channel – relay to user's DM."""
         ticket = await self.ticket_service.get_ticket_by_channel(message.channel.id)
         if not ticket:
             return
@@ -248,7 +230,6 @@ class ModMailCog(commands.Cog):
         member = message.guild.get_member(message.author.id)
         if not member:
             return
-        
         if not await is_staff(member, config):
             await message.delete()
             await message.author.send("You cannot reply in this ticket channel. Staff only.")
@@ -276,17 +257,14 @@ class ModMailCog(commands.Cog):
         if not interaction.guild:
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
             return False
-        
         config_service = GuildConfigService(self.bot.db)
         config = await config_service.get_config(interaction.guild_id)
         if not await is_staff(interaction.user, config):
             await interaction.response.send_message("❌ You don't have permission to use this command.", ephemeral=True)
             return False
-        
         if not is_ticket_channel(interaction.channel):
             await interaction.response.send_message("❌ This command can only be used in a ticket channel.", ephemeral=True)
             return False
-        
         return True
 
 async def setup(bot: commands.Bot):
