@@ -58,7 +58,7 @@ class LogService:
         """Log when a ticket is claimed."""
         embed = discord.Embed(
             title="✅ Ticket Claimed",
-            description=f**"Ticket ID:** `{ticket.ticket_id}`\n**Channel:** <#{ticket.channel_id}>\n**Claimed by:** {staff.mention}",
+            description=f"**Ticket ID:** `{ticket.ticket_id}`\n**Channel:** <#{ticket.channel_id}>\n**Claimed by:** {staff.mention}",
             color=discord.Color.blue(),
             timestamp=datetime.utcnow()
         )
@@ -68,7 +68,7 @@ class LogService:
         """Log when a ticket channel is renamed."""
         embed = discord.Embed(
             title="✏️ Ticket Renamed",
-            description=f**"Ticket ID:** `{ticket.ticket_id}`\n**Old name:** `{old_name}`\n**New name:** `{new_name}`\n**Renamed by:** {staff.mention}",
+            description=f"**Ticket ID:** `{ticket.ticket_id}`\n**Old name:** `{old_name}`\n**New name:** `{new_name}`\n**Renamed by:** {staff.mention}",
             color=discord.Color.gold(),
             timestamp=datetime.utcnow()
         )
@@ -78,7 +78,7 @@ class LogService:
         """Log when a user replies via DM."""
         embed = discord.Embed(
             title="💬 User Reply",
-            description=f**"Ticket ID:** `{ticket.ticket_id}`\n**User:** {user.mention}\n**Message:** {content[:500]}",
+            description=f"**Ticket ID:** `{ticket.ticket_id}`\n**User:** {user.mention}\n**Message:** {content[:500]}",
             color=discord.Color.orange(),
             timestamp=datetime.utcnow()
         )
@@ -88,7 +88,7 @@ class LogService:
         """Log when a staff replies in ticket channel."""
         embed = discord.Embed(
             title="📨 Staff Reply",
-            description=f**"Ticket ID:** `{ticket.ticket_id}`\n**Staff:** {staff.mention}\n**Message:** {content[:500]}",
+            description=f"**Ticket ID:** `{ticket.ticket_id}`\n**Staff:** {staff.mention}\n**Message:** {content[:500]}",
             color=discord.Color.teal(),
             timestamp=datetime.utcnow()
         )
@@ -98,7 +98,7 @@ class LogService:
         """Log when a ticket is auto-closed due to inactivity."""
         embed = discord.Embed(
             title="⏰ Auto-Closed Ticket",
-            description=f**"Ticket ID:** `{ticket.ticket_id}`\n**User:** <@{ticket.user_id}>\n**Channel:** <#{ticket.channel_id}>\n**Reason:** {reason}",
+            description=f"**Ticket ID:** `{ticket.ticket_id}`\n**User:** <@{ticket.user_id}>\n**Channel:** <#{ticket.channel_id}>\n**Reason:** {reason}",
             color=discord.Color.dark_red(),
             timestamp=datetime.utcnow()
         )
