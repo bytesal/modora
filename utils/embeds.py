@@ -1,5 +1,6 @@
 import discord
 from datetime import datetime
+from typing import Union
 
 def create_ticket_embed(user: discord.User, username: str) -> discord.Embed:
     """Embed sent in new ticket channel."""
@@ -12,7 +13,7 @@ def create_ticket_embed(user: discord.User, username: str) -> discord.Embed:
     embed.set_footer(text="Ticket created")
     return embed
 
-def create_reply_embed(author: discord.Union[discord.User, discord.Member], content: str, is_staff: bool) -> discord.Embed:
+def create_reply_embed(author: Union[discord.User, discord.Member], content: str, is_staff: bool) -> discord.Embed:
     """Embed for relaying messages between user and staff."""
     if is_staff:
         title = "📨 Staff Reply"
