@@ -7,37 +7,51 @@ from utils.logger import setup_logger, get_logger
 from utils.error_handler import ErrorHandler
 from utils.blacklist import BlacklistManager
 from utils.rate_limiter import RateLimiter
+from utils.health_check import HealthCheckServer
 import os
+import signal
 
 setup_logger()
 logger = get_logger()
 
 class ModMailBot(commands.Bot):
     def __init__(self):
+        # Optimize intents – disable voice and other unused events
         intents = discord.Intents.default()
         intents.message_content = True
         intents.members = True
         intents.guilds = True
         intents.dm_messages = True
         
+        # Disable voice if configured (saves memory)
+        if config.DISABLE_VOICE:
+            discord.VoiceClient = None
+        
         super().__init__(
             command_prefix=config.BOT_PREFIX,
             intents=intents,
-            help_command=None
+            help_command=None,
+            max_messages=config.MAX_MESSAGES_CACHE
         )
         self.db = None
         self.error_handler = None
         self.blacklist = None
         self.dm_rate_limiter = RateLimiter(max_messages=5, per_seconds=60)
+        self.health_server = None
 
     async def setup_hook(self):
         logger.info("Setting up bot...")
         
+        # Connect to database
         await mongo.connect()
         self.db = mongo
         self.blacklist = BlacklistManager(self.db)
         
         self.error_handler = ErrorHandler(self)
+        
+        # Start health check server
+        self.health_server = HealthCheckServer(self)
+        await self.health_server.start()
         
         await self.load_cogs()
         
@@ -62,6 +76,13 @@ class ModMailBot(commands.Bot):
     async def on_ready(self):
         logger.info(f"Logged in as {self.user} (ID: {self.user.id})")
         logger.info(f"Connected to {len(self.guilds)} guild(s)")
+        logger.info(f"Memory usage: {self._get_memory_usage()}")
+
+    def _get_memory_usage(self):
+        """Return current memory usage in MB."""
+        import psutil
+        process = psutil.Process()
+        return f"{process.memory_info().rss / 1024 / 1024:.2f} MB"
 
     async def on_message(self, message: discord.Message):
         if message.author.bot:
@@ -79,7 +100,6 @@ class ModMailBot(commands.Bot):
                 await message.channel.send(f"⏳ You are sending messages too quickly. Please wait {wait} seconds.")
                 return
         
-        # Process commands (if any prefix commands are added later)
         await self.process_commands(message)
 
     async def on_command_error(self, ctx, error):
@@ -93,11 +113,18 @@ class ModMailBot(commands.Bot):
 
     async def close(self):
         logger.info("Shutting down...")
+        if self.health_server:
+            await self.health_server.stop()
         await mongo.disconnect()
         await super().close()
 
 def main():
     bot = ModMailBot()
+    
+    # Graceful shutdown on SIGTERM (Railway sends this)
+    loop = asyncio.get_event_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, lambda: asyncio.create_task(bot.close()))
     
     # Set up slash command error handling
     @bot.tree.error
