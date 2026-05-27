@@ -164,56 +164,38 @@ class SetupCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @app_commands.group(name="setup", description="Configure the ModMail bot for this server")
-    @app_commands.default_permissions(administrator=True)
-    async def setup_group(self, interaction: Interaction):
-        if interaction.invoked_subcommand is None:
-            embed = discord.Embed(
-                title="Setup Commands",
-                description=(
-                    "Use `/setup category` – set the ticket category\n"
-                    "/setup staffrole – add or remove staff roles\n"
-                    "/setup logs – set logs channel\n"
-                    "/setup transcripts – set transcripts channel\n"
-                    "/setup panel – set panel channel and deploy message\n"
-                    "/setup cooldown – set cooldown seconds between tickets\n"
-                    "/setup autoclose – set auto-close timeout in minutes\n"
-                    "/setup show – show current configuration\n"
-                    "/setup reset – reset all settings"
-                ),
-                color=discord.Color.blue()
-            )
-            await interaction.response.send_message(embed=embed, ephemeral=True)
+    # Create the group
+    setup = app_commands.Group(name="setup", description="Configure the ModMail bot for this server", default_permissions=discord.Permissions(administrator=True))
 
-    @setup_group.command(name="category", description="Set the category where ticket channels will be created")
+    @setup.command(name="category", description="Set the category where ticket channels will be created")
     async def setup_category(self, interaction: Interaction):
         if not await is_admin(interaction):
             await interaction.response.send_message("❌ You need administrator permissions.", ephemeral=True)
             return
         await interaction.response.send_modal(CategoryModal())
 
-    @setup_group.command(name="staffrole", description="Add or remove staff roles")
+    @setup.command(name="staffrole", description="Add or remove staff roles")
     async def setup_staffrole(self, interaction: Interaction):
         if not await is_admin(interaction):
             await interaction.response.send_message("❌ You need administrator permissions.", ephemeral=True)
             return
         await interaction.response.send_modal(StaffRoleModal())
 
-    @setup_group.command(name="logs", description="Set the logs channel for ticket activity")
+    @setup.command(name="logs", description="Set the logs channel for ticket activity")
     async def setup_logs(self, interaction: Interaction):
         if not await is_admin(interaction):
             await interaction.response.send_message("❌ You need administrator permissions.", ephemeral=True)
             return
         await interaction.response.send_modal(ChannelModal("Set Logs Channel", "logs"))
 
-    @setup_group.command(name="transcripts", description="Set the transcripts channel")
+    @setup.command(name="transcripts", description="Set the transcripts channel")
     async def setup_transcripts(self, interaction: Interaction):
         if not await is_admin(interaction):
             await interaction.response.send_message("❌ You need administrator permissions.", ephemeral=True)
             return
         await interaction.response.send_modal(ChannelModal("Set Transcripts Channel", "transcripts"))
 
-    @setup_group.command(name="panel", description="Set the panel channel and deploy the ticket opening message")
+    @setup.command(name="panel", description="Set the panel channel and deploy the ticket opening message")
     async def setup_panel(self, interaction: Interaction):
         if not await is_admin(interaction):
             await interaction.response.send_message("❌ You need administrator permissions.", ephemeral=True)
@@ -221,7 +203,7 @@ class SetupCog(commands.Cog):
         modal = PanelChannelModal(self.bot)
         await interaction.response.send_modal(modal)
 
-    @setup_group.command(name="cooldown", description="Set cooldown seconds between ticket creation (0 to disable)")
+    @setup.command(name="cooldown", description="Set cooldown seconds between ticket creation (0 to disable)")
     async def setup_cooldown(self, interaction: Interaction, seconds: int):
         if not await is_admin(interaction):
             await interaction.response.send_message("❌ You need administrator permissions.", ephemeral=True)
@@ -238,7 +220,7 @@ class SetupCog(commands.Cog):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @setup_group.command(name="autoclose", description="Set auto-close timeout in minutes (0 to disable)")
+    @setup.command(name="autoclose", description="Set auto-close timeout in minutes (0 to disable)")
     async def setup_autoclose(self, interaction: Interaction, minutes: int):
         if not await is_admin(interaction):
             await interaction.response.send_message("❌ You need administrator permissions.", ephemeral=True)
@@ -255,7 +237,7 @@ class SetupCog(commands.Cog):
         )
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @setup_group.command(name="show", description="Show current configuration for this server")
+    @setup.command(name="show", description="Show current configuration for this server")
     async def setup_show(self, interaction: Interaction):
         if not await is_admin(interaction):
             await interaction.response.send_message("❌ You need administrator permissions.", ephemeral=True)
@@ -275,7 +257,7 @@ class SetupCog(commands.Cog):
         
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
-    @setup_group.command(name="reset", description="Reset all configuration for this server")
+    @setup.command(name="reset", description="Reset all configuration for this server")
     async def setup_reset(self, interaction: Interaction):
         if not await is_admin(interaction):
             await interaction.response.send_message("❌ You need administrator permissions.", ephemeral=True)
@@ -312,4 +294,6 @@ class SetupCog(commands.Cog):
             return False
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(SetupCog(bot))
+    cog = SetupCog(bot)
+    await bot.add_cog(cog)
+    bot.tree.add_command(cog.setup)
