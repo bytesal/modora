@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
-from discord import app_commands, Interaction
-from discord.ui import Modal, TextInput, TextStyle
+from discord import app_commands, Interaction, TextStyle
+from discord.ui import Modal, TextInput
 from typing import Optional
 from services.guild_config_service import GuildConfigService
 from utils.permissions import is_admin
