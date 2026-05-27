@@ -56,7 +56,7 @@ class TicketService:
         try:
             channel = await guild.create_text_channel(name, category=category, overwrites=overwrites)
             # Create database entry
-            await self.create_ticket(user.id, guild.id, channel.id)
+            ticket = await self.create_ticket(user.id, guild.id, channel.id)
             return channel
         except Exception as e:
             logger.error(f"Failed to create ticket channel: {e}")
@@ -70,7 +70,7 @@ class TicketService:
             query["guild_id"] = guild_id
         data = await collection.find_one(query)
         if data:
-            return Ticket(user_id, data.get("guild_id"), data)
+            return Ticket(data["user_id"], data.get("guild_id"), data)
         return None
 
     async def get_ticket_by_channel(self, channel_id: int) -> Optional[Ticket]:
@@ -80,6 +80,23 @@ class TicketService:
         if data:
             return Ticket(data["user_id"], data["guild_id"], data)
         return None
+
+    async def get_ticket_by_id(self, ticket_id: str) -> Optional[Ticket]:
+        """Get a ticket by its unique ticket ID."""
+        collection = await self._get_collection()
+        data = await collection.find_one({"ticket_id": ticket_id})
+        if data:
+            return Ticket(data["user_id"], data["guild_id"], data)
+        return None
+
+    async def get_all_open_tickets(self) -> List[Ticket]:
+        """Get all tickets with status open, claimed, or reopened."""
+        collection = await self._get_collection()
+        cursor = collection.find({"status": {"$in": ["open", "claimed", "reopened"]}})
+        tickets = []
+        async for data in cursor:
+            tickets.append(Ticket(data["user_id"], data["guild_id"], data))
+        return tickets
 
     async def update_activity(self, ticket_id: str):
         """Update last_activity timestamp for a ticket."""
@@ -104,5 +121,3 @@ class TicketService:
             {"ticket_id": ticket.ticket_id},
             {"$set": {"status": TicketStatus.CLOSED.value, "closed_at": datetime.utcnow()}}
         )
-        # Optionally notify user
-        # Transcript generation will be handled later (Phase 5)
