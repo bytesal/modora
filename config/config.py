@@ -17,23 +17,17 @@ class Config:
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
     ERROR_WEBHOOK_URL = os.getenv("ERROR_WEBHOOK_URL")
     
-    # Database names
     DB_NAME = os.getenv("DB_NAME", "modmail_db")
-    
-    # Collection names
     COLL_GUILDS = "guild_configs"
     COLL_TICKETS = "tickets"
     COLL_LOGS = "logs"
     
-    # Railway production optimizations
     MONGO_MAX_POOL_SIZE = int(os.getenv("MONGO_MAX_POOL_SIZE", "10"))
     MONGO_MIN_POOL_SIZE = int(os.getenv("MONGO_MIN_POOL_SIZE", "1"))
     MONGO_MAX_IDLE_TIME_MS = int(os.getenv("MONGO_MAX_IDLE_TIME_MS", "10000"))
     
-    # Health check
     HEALTH_CHECK_PORT = int(os.getenv("HEALTH_CHECK_PORT", "8080"))
     
-    # Memory optimization
     MAX_MESSAGES_CACHE = int(os.getenv("MAX_MESSAGES_CACHE", "1000"))
     DISABLE_VOICE = os.getenv("DISABLE_VOICE", "True").lower() == "true"
 
