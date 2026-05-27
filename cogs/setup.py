@@ -2,7 +2,6 @@ import discord
 from discord.ext import commands
 from discord import app_commands, Interaction, TextStyle
 from discord.ui import Modal, TextInput
-from typing import Optional
 from services.guild_config_service import GuildConfigService
 from utils.permissions import is_admin
 from utils.logger import get_logger
@@ -17,7 +16,6 @@ class CategoryModal(Modal, title="Set Ticket Category"):
         required=True,
         style=TextStyle.short
     )
-    
     async def on_submit(self, interaction: Interaction):
         try:
             category_id = int(self.category_id.value)
@@ -50,14 +48,12 @@ class StaffRoleModal(Modal, title="Manage Staff Roles"):
         required=True,
         style=TextStyle.short
     )
-    
     async def on_submit(self, interaction: Interaction):
         action = self.action.value.lower()
         try:
             role_id = int(self.role_id.value)
             await interaction.response.defer(ephemeral=True)
             service = GuildConfigService(interaction.client.db)
-            
             if action == "add":
                 await service.add_staff_role(interaction.guild_id, role_id)
                 embed = discord.Embed(
@@ -94,13 +90,11 @@ class ChannelModal(Modal):
             style=TextStyle.short
         )
         self.add_item(self.channel_id_input)
-    
     async def on_submit(self, interaction: Interaction):
         try:
             channel_id = int(self.channel_id_input.value)
             await interaction.response.defer(ephemeral=True)
             service = GuildConfigService(interaction.client.db)
-            
             if self.setting_name == "logs":
                 await service.set_logs_channel(interaction.guild_id, channel_id)
                 desc = f"Logs channel set to <#{channel_id}>"
@@ -110,7 +104,6 @@ class ChannelModal(Modal):
             else:
                 await interaction.followup.send("❌ Unknown setting.", ephemeral=True)
                 return
-            
             embed = discord.Embed(title="✅ Channel Set", description=desc, color=discord.Color.green())
             await interaction.followup.send(embed=embed, ephemeral=True)
             logger.info(f"Guild {interaction.guild_id} set {self.setting_name} to {channel_id}")
@@ -127,18 +120,15 @@ class PanelChannelModal(Modal, title="Set Panel Channel"):
         required=True,
         style=TextStyle.short
     )
-    
     def __init__(self, bot):
         super().__init__()
         self.bot = bot
-    
     async def on_submit(self, interaction: Interaction):
         try:
             channel_id = int(self.channel_id.value)
             await interaction.response.defer(ephemeral=True)
             service = GuildConfigService(interaction.client.db)
             await service.set_panel_channel(interaction.guild_id, channel_id)
-            
             cog = interaction.client.get_cog("SetupCog")
             success = await cog.deploy_panel(interaction, channel_id)
             if success:
@@ -150,7 +140,7 @@ class PanelChannelModal(Modal, title="Set Panel Channel"):
             else:
                 embed = discord.Embed(
                     title="⚠️ Partial Setup",
-                    description=f"Panel channel set but failed to send message. Please check permissions (bot needs Send Messages and Embed Links).",
+                    description="Panel channel set but failed to send message. Please check permissions (bot needs Send Messages and Embed Links).",
                     color=discord.Color.orange()
                 )
             await interaction.followup.send(embed=embed, ephemeral=True)
@@ -164,8 +154,11 @@ class SetupCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    # Create the group
-    setup = app_commands.Group(name="setup", description="Configure the ModMail bot for this server", default_permissions=discord.Permissions(administrator=True))
+    setup = app_commands.Group(
+        name="setup",
+        description="Configure the ModMail bot for this server",
+        default_permissions=discord.Permissions(administrator=True)
+    )
 
     @setup.command(name="category", description="Set the category where ticket channels will be created")
     async def setup_category(self, interaction: Interaction):
@@ -244,7 +237,6 @@ class SetupCog(commands.Cog):
             return
         service = GuildConfigService(self.bot.db)
         config = await service.get_config(interaction.guild_id)
-        
         embed = discord.Embed(title="ModMail Configuration", color=discord.Color.blue())
         embed.add_field(name="Category", value=f"<#{config.category_id}>" if config.category_id else "Not set", inline=False)
         staff_roles = ", ".join(f"<@&{rid}>" for rid in config.staff_role_ids) if config.staff_role_ids else "None"
@@ -254,7 +246,6 @@ class SetupCog(commands.Cog):
         embed.add_field(name="Panel Channel", value=f"<#{config.panel_channel_id}>" if config.panel_channel_id else "Not set", inline=False)
         embed.add_field(name="Auto-close (minutes)", value=str(config.auto_close_minutes), inline=True)
         embed.add_field(name="Cooldown (seconds)", value=str(config.cooldown_seconds), inline=True)
-        
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
     @setup.command(name="reset", description="Reset all configuration for this server")
@@ -276,14 +267,12 @@ class SetupCog(commands.Cog):
         channel = interaction.guild.get_channel(channel_id)
         if not channel:
             return False
-        
         embed = discord.Embed(
             title="ModMail Support",
             description="Click the button below to open a ticket. A private channel will be created for you to communicate with staff.",
             color=discord.Color.blue()
         )
         view = TicketPanelView(self.bot)
-        
         try:
             message = await channel.send(embed=embed, view=view)
             service = GuildConfigService(self.bot.db)
@@ -296,4 +285,4 @@ class SetupCog(commands.Cog):
 async def setup(bot: commands.Bot):
     cog = SetupCog(bot)
     await bot.add_cog(cog)
-    bot.tree.add_command(cog.setup)
+    # No manual add_command – auto-registered via class attribute
