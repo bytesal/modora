@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import app_commands, Interaction
 from services.ticket_service import TicketService
 from services.guild_config_service import GuildConfigService
-from utils.permissions import is_staff, is_ticket_channel
+from utils.permissions import is_staff, is_ticket_channel, check_blacklist
 from utils.logger import get_logger
 from utils.embeds import create_ticket_embed, create_reply_embed
 from utils.cooldown import CooldownManager
@@ -33,6 +33,10 @@ class ModMailCog(commands.Cog):
     @modmail_group.command(name="new", description="Open a new ModMail ticket")
     async def modmail_new(self, interaction: Interaction, message: str = None):
         """Open a new ticket. If message is provided, use as initial message."""
+        # Blacklist check
+        if not await check_blacklist(interaction):
+            return
+        
         if not interaction.guild:
             await interaction.response.send_message("This command can only be used in a server.", ephemeral=True)
             return
@@ -198,7 +202,14 @@ class ModMailCog(commands.Cog):
             await self.handle_staff_reply(message)
 
     async def handle_user_dm(self, message: discord.Message):
+        """User sent a DM to the bot – relay to their open ticket channel."""
         user = message.author
+        
+        # Blacklist check
+        if await self.bot.blacklist.is_blacklisted(user.id, "user"):
+            await user.send("❌ You are blacklisted from using this bot.")
+            return
+        
         ticket = await self.ticket_service.get_open_ticket(user.id)
         if not ticket:
             embed = discord.Embed(
@@ -227,6 +238,7 @@ class ModMailCog(commands.Cog):
         logger.info(f"User reply from {user} in ticket {ticket.ticket_id}")
 
     async def handle_staff_reply(self, message: discord.Message):
+        """Staff message in a ticket channel – relay to user's DM."""
         ticket = await self.ticket_service.get_ticket_by_channel(message.channel.id)
         if not ticket:
             return
