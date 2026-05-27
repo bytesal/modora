@@ -19,10 +19,8 @@ class TranscriptService:
         async for message in channel.history(limit=500, oldest_first=True):
             messages.append(message)
         
-        # Create HTML content
         html = self._build_html(messages, channel, ticket)
         
-        # Save to temp file
         filename = f"transcript_{ticket.ticket_id}_{int(datetime.utcnow().timestamp())}.html"
         filepath = f"/tmp/{filename}"
         
@@ -32,31 +30,39 @@ class TranscriptService:
         return filepath
     
     def _build_html(self, messages: List[discord.Message], channel: discord.TextChannel, ticket: Ticket) -> str:
-        """Build HTML content from messages."""
-        # Simple HTML template – can be expanded with CSS
+        """Build enhanced HTML content from messages including attachments."""
         html = f"""<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <title>Transcript - Ticket {ticket.ticket_id}</title>
     <style>
-        body {{ font-family: Arial, sans-serif; background: #f0f0f0; padding: 20px; }}
-        .container {{ max-width: 800px; margin: auto; background: white; border-radius: 10px; padding: 20px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }}
-        .message {{ margin-bottom: 15px; padding: 10px; border-left: 3px solid #7289da; background: #f9f9f9; }}
-        .author {{ font-weight: bold; color: #7289da; }}
-        .timestamp {{ font-size: 0.8em; color: gray; margin-left: 10px; }}
-        .content {{ margin-top: 5px; }}
-        hr {{ margin: 20px 0; }}
-        .footer {{ text-align: center; font-size: 0.8em; color: gray; margin-top: 20px; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background: #36393f; padding: 20px; margin: 0; }}
+        .container {{ max-width: 1000px; margin: 0 auto; background: #2f3136; border-radius: 8px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); }}
+        .header {{ border-bottom: 1px solid #202225; padding-bottom: 10px; margin-bottom: 20px; }}
+        .header h1 {{ color: #fff; margin: 0; }}
+        .header p {{ color: #b9bbbe; margin: 5px 0; }}
+        .message {{ margin-bottom: 15px; padding: 10px; background: #40444b; border-radius: 8px; }}
+        .message:hover {{ background: #4f545c; }}
+        .author {{ font-weight: bold; color: #7289da; display: inline-block; }}
+        .timestamp {{ font-size: 0.75em; color: #72767d; margin-left: 10px; }}
+        .content {{ margin-top: 8px; color: #dcddde; white-space: pre-wrap; word-wrap: break-word; }}
+        .attachment {{ margin-top: 8px; padding: 8px; background: #2f3136; border-radius: 4px; border-left: 3px solid #7289da; }}
+        .attachment a {{ color: #00b0f4; text-decoration: none; }}
+        .attachment a:hover {{ text-decoration: underline; }}
+        hr {{ border: none; border-top: 1px solid #202225; margin: 20px 0; }}
+        .footer {{ text-align: center; font-size: 0.8em; color: #72767d; margin-top: 20px; }}
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Transcript for Ticket #{ticket.ticket_id}</h1>
-        <p><strong>User:</strong> <@{ticket.user_id}> (ID: {ticket.user_id})</p>
-        <p><strong>Channel:</strong> #{channel.name}</p>
-        <p><strong>Created:</strong> {ticket.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
-        <p><strong>Closed:</strong> {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
+        <div class="header">
+            <h1>Transcript for Ticket #{ticket.ticket_id}</h1>
+            <p><strong>User:</strong> {ticket.user_id} (ID: {ticket.user_id})</p>
+            <p><strong>Channel:</strong> #{channel.name}</p>
+            <p><strong>Created:</strong> {ticket.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') if ticket.created_at else 'Unknown'}</p>
+            <p><strong>Closed:</strong> {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}</p>
+        </div>
         <hr>
 """
         for msg in messages:
@@ -65,13 +71,32 @@ class TranscriptService:
             content = msg.clean_content or "*No text content*"
             html += f"""
         <div class="message">
-            <div class="author">{author_name} <span class="timestamp">({timestamp})</span></div>
+            <div class="author">{author_name}</div>
+            <div class="timestamp">({timestamp})</div>
             <div class="content">{content}</div>
+"""
+            # Add attachments
+            if msg.attachments:
+                for attachment in msg.attachments:
+                    html += f"""
+            <div class="attachment">
+                📎 <a href="{attachment.url}">{attachment.filename}</a> ({attachment.size // 1024} KB)
+            </div>
+"""
+            # Add embeds (simplified)
+            if msg.embeds:
+                for embed in msg.embeds:
+                    html += f"""
+            <div class="attachment">
+                🔗 Embed: {embed.title or 'No title'} - {embed.url or ''}
+            </div>
+"""
+            html += """
         </div>
 """
         html += """
         <hr>
-        <div class="footer">Generated by ModMail Bot</div>
+        <div class="footer">Generated by ModMail Bot • Transcript includes up to 500 messages</div>
     </div>
 </body>
 </html>"""
@@ -105,7 +130,6 @@ class TranscriptService:
         file = discord.File(filepath, filename=f"transcript_{ticket.ticket_id}.html")
         message = await transcript_channel.send(embed=embed, file=file)
         
-        # Clean up temp file
         try:
             os.remove(filepath)
         except:
